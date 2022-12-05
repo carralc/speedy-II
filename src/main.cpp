@@ -47,8 +47,24 @@ DeadReckoner deadReckoner(&leftTicks, &rightTicks, POSITION_COMPUTE_INTERVAL, TI
 // Inicializamos los motores
 L298NX2 motors(L_ENABLE, L_IN_1, L_IN_2, R_ENABLE, R_IN_1, R_IN_2);
 
-void pulseLeft() { leftTicks++; }
-void pulseRight() { rightTicks++; }
+void pulseLeft() { 
+	leftTicks++; 
+	if(leftTicks>=30){
+		Serial.print("Ticks izquierda:");
+		Serial.println(leftTicks);
+		motors.stopA();
+	}
+}
+void pulseRight() { 
+	rightTicks++; 
+	if(rightTicks>=30){
+		motors.stopB();
+		Serial.print("Ticks derecha:");
+		Serial.println(rightTicks);
+	}
+}
+
+long lapse;
 
 /**
 Attaches interrupt and disables all serial communications.
@@ -98,7 +114,8 @@ void setup()
 	}
 	motors.setSpeedA(255);
 	motors.setSpeedB(255);
-	
+	motors.forwardA();
+	motors.forwardB();
 #if defined LONG_RANGE
 	// lower the return signal rate limit (default is 0.25 MCPS)
 	sensor.setSignalRateLimit(0.1);
@@ -114,8 +131,8 @@ void setup()
 	// increase timing budget to 200 ms
 	sensor.setMeasurementTimingBudget(200000);
 #endif
-}
 
+}
 double x;
 double y;
 double wl;
@@ -125,93 +142,11 @@ double distance;
 
 void loop()
 {
-	motors.forwardA();
-	motors.forwardB();
+	//rightTicks = 0;
+	//motors.forwardForA(lapse);
+	//Serial.print("ticks derecha:");
+	//Serial.println(rightTicks);
+	//delay(10000);
+	//lapse += 333;
 
-	
-	if (millis() - prevPositionComputeTime > POSITION_COMPUTE_INTERVAL)
-	{
-		// Computes the new angular velocities and uses that to compute the new position.
-		// The accuracy of the position estimate will increase with smaller time interval until a certain point.
-		deadReckoner.computePosition();
-		prevPositionComputeTime = millis();
-	}
-
-	if (millis() - prevSendTime > SEND_INTERVAL)
-	{
-		// Cartesian coordinate of latest location estimate.
-		// Length unit correspond to the one specified under MEASUREMENTS.
-		x = deadReckoner.getX();
-		y = deadReckoner.getY();
-
-		// Left and right angular velocities.
-		wl = deadReckoner.getWl();
-		wr = deadReckoner.getWr();
-
-		// getTheta method returns the robot position angle in radians measured from the x axis to the center of the robot.
-		// This angle is set initially at zero before the robot starts moving.
-		theta = deadReckoner.getTheta();
-
-		// Total distance robot has troubled.
-		distance = sqrt(x * x + y * y);
-		// x, y, wl, wr, theta, dist
-		Serial.print(x);
-		Serial.print(",\t");
-		Serial.print(y);
-		Serial.print(",\t");
-		Serial.print(wl);
-		Serial.print(",\t");
-		Serial.print(wr);
-		Serial.print(",\t");
-		Serial.print(theta * RAD_TO_DEG); // theta converted to degrees.
-		Serial.print(",\t");
-		Serial.println(distance);
-
-		prevSendTime = millis();
-	}
-
-	if (sensor.timeoutOccurred())
-	{
-		Serial.print(" TIMEOUT");
-	}
-	// Send an HTTP POST request every 10 minutes
-	if ((millis() - lastTime) > timerDelay)
-	{
-		// Check WiFi connection status
-		if (WiFi.status() == WL_CONNECTED)
-		{
-			HTTPClient http;
-
-			String serverPath = serverName + "/" + x + "/" + y + "/" + theta;
-
-			// Your Domain name with URL path or IP address with path
-			http.begin(serverPath.c_str());
-
-			// If you need Node-RED/server authentication, insert user and password below
-			// http.setAuthorization("REPLACE_WITH_SERVER_USERNAME", "REPLACE_WITH_SERVER_PASSWORD");
-
-			// Send HTTP GET request
-			int httpResponseCode = http.GET();
-
-			if (httpResponseCode > 0)
-			{
-				Serial.print("HTTP Response code: ");
-				Serial.println(httpResponseCode);
-				String payload = http.getString();
-				Serial.println(payload);
-			}
-			else
-			{
-				Serial.print("Error code: ");
-				Serial.println(httpResponseCode);
-			}
-			// Free resources
-			http.end();
-		}
-		else
-		{
-			Serial.println("WiFi Disconnected");
-		}
-		lastTime = millis();
-	}
 }
