@@ -11,8 +11,8 @@
 #define R_IN_2 12
 
 #define RADIUS 33 // wheel radius in mm
-#define LENGTH 102 // wheel base length in mm
-#define TICKS_PER_REV 140
+#define LENGTH 100 // wheel base length in mm
+#define TICKS_PER_REV 18
 
 // TIME INTERVALS
 #define POSITION_COMPUTE_INTERVAL 50 // milliseconds

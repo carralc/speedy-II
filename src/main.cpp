@@ -6,6 +6,8 @@
 #include <HTTPClient.h>
 #include <constantsV2.h>
 #include <L298NX2.h>
+#include <HCSR04.h>
+
 
 VL53L0X sensor;
 
@@ -34,7 +36,7 @@ unsigned long timerDelay = 1000;
 // Dead reckoner
 
 // Number of left and right tick counts on the encoder.
-volatile unsigned long leftTicks, rightTicks;
+volatile unsigned long leftTicks, rightTicks, leftAuxTicks, rightAuxTicks;
 
 // Previous times for computing elapsed time.
 unsigned long prevPositionComputeTime = 0, prevSendTime = 0;
@@ -47,8 +49,12 @@ DeadReckoner deadReckoner(&leftTicks, &rightTicks, POSITION_COMPUTE_INTERVAL, TI
 // Inicializamos los motores
 L298NX2 motors(L_ENABLE, L_IN_1, L_IN_2, R_ENABLE, R_IN_1, R_IN_2);
 
-void pulseLeft() { leftTicks++; }
-void pulseRight() { rightTicks++; }
+// Inicializamos los sensores ultrasonicos
+UltraSonicDistanceSensor uds_left(5, 2);
+UltraSonicDistanceSensor uds_right(19, 4);
+
+void pulseLeft() { leftTicks++; leftAuxTicks++; }
+void pulseRight() { rightTicks++; rightAuxTicks++; }
 
 /**
 Attaches interrupt and disables all serial communications.
@@ -64,13 +70,6 @@ void setup()
 {
 	Serial.begin(9600);
 	attachInterrupts();
-	// Encoder and motor outputs
-	pinMode(L_ENABLE, OUTPUT);
-	pinMode(R_ENABLE, OUTPUT);
-	pinMode(L_IN_1, OUTPUT);
-	pinMode(L_IN_2, OUTPUT);
-	pinMode(R_IN_1, OUTPUT);
-	pinMode(R_IN_2, OUTPUT);
 
 	WiFi.begin(ssid, password);
 	Serial.println("Connecting");
@@ -98,6 +97,7 @@ void setup()
 	}
 	motors.setSpeedA(255);
 	motors.setSpeedB(255);
+
 	
 #if defined LONG_RANGE
 	// lower the return signal rate limit (default is 0.25 MCPS)
@@ -122,13 +122,9 @@ double wl;
 double wr;
 double theta;
 double distance;
+int numberSteps = 2;
 
-void loop()
-{
-	motors.forwardA();
-	motors.forwardB();
-
-	
+void calcularUbicacion() { 
 	if (millis() - prevPositionComputeTime > POSITION_COMPUTE_INTERVAL)
 	{
 		// Computes the new angular velocities and uses that to compute the new position.
@@ -166,52 +162,61 @@ void loop()
 		Serial.print(theta * RAD_TO_DEG); // theta converted to degrees.
 		Serial.print(",\t");
 		Serial.println(distance);
+		
 
 		prevSendTime = millis();
 	}
+}
 
-	if (sensor.timeoutOccurred())
-	{
-		Serial.print(" TIMEOUT");
-	}
-	// Send an HTTP POST request every 10 minutes
-	if ((millis() - lastTime) > timerDelay)
-	{
-		// Check WiFi connection status
-		if (WiFi.status() == WL_CONNECTED)
-		{
-			HTTPClient http;
+void calcularFronteras() {
+	Serial.println("---------------------------- START Measuring");
+	Serial.println( uds_left.measureDistanceCm() );
+	Serial.println( uds_right.measureDistanceCm() );
+	Serial.println(sensor.readRangeSingleMillimeters());
+	Serial.println("----------------------------- END Measuring");
 
-			String serverPath = serverName + "/" + x + "/" + y + "/" + theta;
-
-			// Your Domain name with URL path or IP address with path
-			http.begin(serverPath.c_str());
-
-			// If you need Node-RED/server authentication, insert user and password below
-			// http.setAuthorization("REPLACE_WITH_SERVER_USERNAME", "REPLACE_WITH_SERVER_PASSWORD");
-
-			// Send HTTP GET request
-			int httpResponseCode = http.GET();
-
-			if (httpResponseCode > 0)
-			{
-				Serial.print("HTTP Response code: ");
-				Serial.println(httpResponseCode);
-				String payload = http.getString();
-				Serial.println(payload);
-			}
-			else
-			{
-				Serial.print("Error code: ");
-				Serial.println(httpResponseCode);
-			}
-			// Free resources
-			http.end();
+	delay(800);
+}
+void stepForward() {
+	while(numberSteps > 0){
+		calcularUbicacion();
+		calcularFronteras();
+		if(leftAuxTicks >= 12){ // antes 18
+			motors.stopA();
+		}else{
+			motors.forwardA();
 		}
-		else
-		{
-			Serial.println("WiFi Disconnected");
+
+		if(rightAuxTicks >= 12){
+			motors.stopB();
+		}else{
+			motors.forwardB();
 		}
-		lastTime = millis();
-	}
+		
+		if(!(motors.isMovingA()) && !(motors.isMovingB())){
+			calcularUbicacion();
+			calcularFronteras();
+			leftAuxTicks = 0;
+			rightAuxTicks = 0;
+			numberSteps--;
+		}
+	}	
+}
+
+void loop()
+{
+	
+	stepForward();
+	// calcularCoordenadas();
+	/*
+	Serial.println( uds_left.measureDistanceCm() );
+	Serial.println( uds_right.measureDistanceCm() );
+	Serial.println( "-----" );
+	Serial.println();
+	delay(600);
+	*/
+
+	
+	
+	
 }
