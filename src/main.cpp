@@ -130,6 +130,7 @@ void calcularFronteras() {
 	distLeft = uds_left.measureDistanceCm() * 10; // cm to mm
 	distRight = uds_right.measureDistanceCm() * 10; 
 	distFront = sensor.readRangeSingleMillimeters();
+	delay(600);
 }
 void calcularUbicacion() { 
 	if (millis() - prevPositionComputeTime > POSITION_COMPUTE_INTERVAL)
@@ -248,7 +249,10 @@ void loop()
 
 	calcularUbicacion();
 	calcularFronteras();
-	// imprimirFronteras();
+	imprimirFronteras();
+	
+	motors.forwardA();
+	motors.forwardB();
 	
 	double xObstFrente, yObstFrente;
 	double xObstDer, yObstDer;
@@ -259,7 +263,6 @@ void loop()
 	coordenadasObstIzq(&yObstIzq, &yObstIzq);
 
 	// Send an HTTP POST request every 10 minutes
-	 
 	if ((millis() - lastTime) > timerDelay)
 	{
 		// Check WiFi connection status
@@ -299,8 +302,7 @@ void loop()
 		}
 		lastTime = millis();
 	}
-	motors.forwardA();
-	motors.forwardB();
+	
 	// stepForward();
 	// calcularCoordenadas();
 	/*
