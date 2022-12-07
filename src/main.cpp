@@ -251,6 +251,33 @@ void loop()
 	calcularFronteras();
 	imprimirFronteras();
 	
+	if(distFront <= 200){
+		motors.stop();
+		motors.forwardA();
+		delay(500);
+		motors.backwardB();
+		delay(500);
+		return;
+	}
+
+	if(distRight <= 200){
+		motors.stop();
+		motors.backwardA();
+		delay(500);
+		motors.forwardB();
+		delay(500);
+		return;
+	}
+
+	if(distLeft <= 200){
+		motors.stop();
+		motors.backwardB();
+		delay(500);
+		motors.forwardA();
+		delay(500);
+		return;
+	}
+
 	motors.forwardA();
 	motors.forwardB();
 	
