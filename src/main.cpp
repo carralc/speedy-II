@@ -23,7 +23,7 @@ const char *ssid = "Sergio's Galaxy S20 FE 5G";
 const char *password = "stk4121505";
 
 // Your Domain name with URL path or IP address with path
-String serverName = "http://192.168.173.35:5000/receptor";
+String serverName = "http://192.168.50.168:5000/dataserver";
 
 // the following variables are unsigned longs because the time, measured in
 // milliseconds, will quickly become a bigger number than can be stored in an int.
@@ -31,7 +31,7 @@ unsigned long lastTime = 0;
 // Timer set to 10 minutes (600000)
 // unsigned long timerDelay = 600000;
 // Set timer to 5 seconds (5000)
-unsigned long timerDelay = 1000;
+unsigned long timerDelay = 300;
 
 // Dead reckoner
 
@@ -122,8 +122,15 @@ double wl;
 double wr;
 double theta;
 double distance;
+double distFront;
+double distRight; 
+double distLeft; 
 int numberSteps = 2;
-
+void calcularFronteras() {
+	distLeft = uds_left.measureDistanceCm() * 10; // cm to mm
+	distRight = uds_right.measureDistanceCm() * 10; 
+	distFront = sensor.readRangeSingleMillimeters();
+}
 void calcularUbicacion() { 
 	if (millis() - prevPositionComputeTime > POSITION_COMPUTE_INTERVAL)
 	{
@@ -168,19 +175,16 @@ void calcularUbicacion() {
 	}
 }
 
-void calcularFronteras() {
-	Serial.println("---------------------------- START Measuring");
-	Serial.println( uds_left.measureDistanceCm() );
-	Serial.println( uds_right.measureDistanceCm() );
-	Serial.println(sensor.readRangeSingleMillimeters());
-	Serial.println("----------------------------- END Measuring");
 
-	delay(800);
+
+void imprimirFronteras() {
+	Serial.printf("distFront: %f\n", distFront);
+	Serial.printf("distLeft: %f\n", distLeft);
+	Serial.printf("distRight: %f\n", distRight);
 }
 void stepForward() {
 	while(numberSteps > 0){
 		calcularUbicacion();
-		calcularFronteras();
 		if(leftAuxTicks >= 12){ // antes 18
 			motors.stopA();
 		}else{
@@ -195,7 +199,7 @@ void stepForward() {
 		
 		if(!(motors.isMovingA()) && !(motors.isMovingB())){
 			calcularUbicacion();
-			calcularFronteras();
+			
 			leftAuxTicks = 0;
 			rightAuxTicks = 0;
 			numberSteps--;
@@ -203,10 +207,101 @@ void stepForward() {
 	}	
 }
 
+// Calcula las coordenadas de un obstáculo detectado por el sensor delantero 
+void coordenadasObstFrente(double* xObst, double* yObst){
+	if(distFront < 0 || distFront >= 2000){
+		*xObst = -1;
+		*yObst = -1;
+	}
+	double xp = x + distFront*cos(theta);
+	double yp = y + distFront*sin(theta);
+	*xObst = xp;
+	*yObst = yp;
+}
+
+// Calcula las coordenadas de un obstáculo detectado por el sensor izquierdo 
+void coordenadasObstIzq(double * xObst, double * yObst){
+	if(distLeft < 0 || distLeft >= 2000){
+		*xObst = -1;
+		*yObst = -1;
+	}
+	double xp = x - distLeft*cos(1.57 - theta); // 90 en rad
+	double yp = y + distLeft*sin(1.57 - theta);
+	*xObst = xp;
+	*yObst = yp;
+}
+
+// Calcula las coordenadas de un obstáculo detectado por el sensor derecho 
+void coordenadasObstDer(double * xObst, double * yObst){
+	if(distLeft < 0 || distLeft >= 2000){
+		*xObst = -1;
+		*yObst = -1;
+	}
+	double xp = x + distRight*cos(1.57 - theta); // 90 en rad
+	double yp = y - distRight*sin(1.57 - theta);
+	*xObst = xp;
+	*yObst = yp;
+}
+
 void loop()
 {
+
+	calcularUbicacion();
+	calcularFronteras();
+	// imprimirFronteras();
 	
-	stepForward();
+	double xObstFrente, yObstFrente;
+	double xObstDer, yObstDer;
+	double xObstIzq, yObstIzq;
+	
+	coordenadasObstFrente(&xObstFrente, &yObstFrente);
+	coordenadasObstDer(&xObstDer, &yObstDer);
+	coordenadasObstIzq(&yObstIzq, &yObstIzq);
+
+	// Send an HTTP POST request every 10 minutes
+	 
+	if ((millis() - lastTime) > timerDelay)
+	{
+		// Check WiFi connection status
+		if (WiFi.status() == WL_CONNECTED)
+		{
+			HTTPClient http;
+
+			String serverPath = serverName + "/" + x + "/" + y + "/" + xObstFrente + "/" + yObstFrente + "/" + xObstDer + "/" + yObstDer + "/" + xObstIzq + "/" + yObstIzq;  
+
+			// Your Domain name with URL path or IP address with path
+			http.begin(serverPath.c_str());
+
+			// If you need Node-RED/server authentication, insert user and password below
+			// http.setAuthorization("REPLACE_WITH_SERVER_USERNAME", "REPLACE_WITH_SERVER_PASSWORD");
+
+			// Send HTTP GET request
+			int httpResponseCode = http.GET();
+
+			if (httpResponseCode > 0)
+			{
+				Serial.print("HTTP Response code: ");
+				Serial.println(httpResponseCode);
+				String payload = http.getString();
+				Serial.println(payload);
+			}
+			else
+			{
+				Serial.print("Error code: ");
+				Serial.println(httpResponseCode);
+			}
+			// Free resources
+			http.end();
+		}
+		else
+		{
+			Serial.println("WiFi Disconnected");
+		}
+		lastTime = millis();
+	}
+	motors.forwardA();
+	motors.forwardB();
+	// stepForward();
 	// calcularCoordenadas();
 	/*
 	Serial.println( uds_left.measureDistanceCm() );
@@ -216,7 +311,4 @@ void loop()
 	delay(600);
 	*/
 
-	
-	
-	
 }
